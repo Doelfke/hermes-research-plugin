@@ -62,7 +62,7 @@ def register(ctx):
             )
 
         # Parse --depth flag
-        depth = "standard"
+        depth = "thorough"
         depth_match = re.search(
             r"--depth\s+(quick|standard|thorough)", topic, re.IGNORECASE
         )

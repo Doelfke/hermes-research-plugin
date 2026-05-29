@@ -55,14 +55,14 @@ Use the `deep_research` tool with:
 | Parameter | When to set |
 |-----------|-------------|
 | `topic`   | Always — include constraints from the clarification step |
-| `depth`   | `quick` for simple/fast; `standard` (default) for most; `thorough` for complex decisions |
+| `depth`   | `thorough` for complex decisions |
 | `focus`   | When the user has a specific angle to emphasize (budget, use-case, comparison criteria) |
 
 **Examples:**
 ```
-deep_research(topic="best toaster for home use under $100", depth="standard")
+deep_research(topic="best toaster for home use under $100", depth="thorough")
 deep_research(topic="electric car for city commuting family of 4", depth="thorough", focus="reliability and total cost of ownership")
-deep_research(topic="React vs Vue for a medium-sized SaaS app", depth="standard", focus="developer experience and ecosystem maturity")
+deep_research(topic="React vs Vue for a medium-sized SaaS app", depth="thorough", focus="developer experience and ecosystem maturity")
 ```
 
 ### 3. Present the Report
@@ -92,9 +92,8 @@ If the user wants to explore a specific angle after the initial report:
 - **Don't strip specifics** — the report contains concrete data; keep it when
   presenting to the user.
 - **Don't re-research immediately on failure** — if `deep_research` returns an
-  error about web search not being configured, tell the user to run `hermes setup`
-  to configure `web_search` and `web_extract` first.
-- **Don't use `quick` for purchase decisions** — `standard` or `thorough` is
+  error, report the error message to the user rather than retrying immediately.
+- **Don't use `quick` for purchase decisions** — `thorough` is
   appropriate whenever the user is about to spend money or make a significant choice.
 
 ## Verification

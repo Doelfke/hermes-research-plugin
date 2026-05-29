@@ -64,7 +64,7 @@ hermes plugins enable deep-research
 ```
 /research what's the best toaster for home use under $100
 /research what electric car should I buy for city commuting --depth thorough
-/research noise-cancelling headphones --focus budget under $200 --depth standard
+/research noise-cancelling headphones --focus budget under $200 --depth thorough
 /research should I move to Austin TX --focus family with young kids
 /research latest advances in battery technology 2025 --depth quick
 /research React vs Vue for a medium SaaS app
@@ -74,15 +74,12 @@ hermes plugins enable deep-research
 
 | Flag | Values | Default | Description |
 |------|--------|---------|-------------|
-| `--depth` | `quick` / `standard` / `thorough` | `standard` | Controls number of sources gathered |
+| `--depth` | `thorough`  Controls number of sources gathered |
 | `--focus` | any text | *(none)* | Specific angle or constraint to emphasize |
 
 **Depth levels:**
 
 | Level | Queries | Sources | Best for |
-|-------|---------|---------|----------|
-| `quick` | 2 | 2–4 | Simple questions, fast answers |
-| `standard` | 4 | 4–6 | Most research tasks (default) |
 | `thorough` | 6 | 7–9 | Complex purchase decisions, nuanced topics |
 
 ### Via the skill
@@ -137,10 +134,6 @@ supports plugin LLM access (v0.8+).
 
 **`/research` command not found after install**
 Run `hermes plugins enable deep-research` and restart Hermes.
-
-**Slow on `--depth thorough`**
-This is expected — 6 searches × 3 extracts = up to 18 web calls + 2 LLM calls.
-Use `--depth standard` for faster results.
 
 ---
 
