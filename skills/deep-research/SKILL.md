@@ -67,12 +67,15 @@ deep_research(topic="React vs Vue for a medium-sized SaaS app", depth="thorough"
 
 ### 3. Present the Report
 
-When `deep_research` returns:
+When `deep_research` returns, **synthesize the findings into a direct answer**:
 
-- **Lead with the answer** — give the recommendation or conclusion upfront, then
-  support it with evidence from the report.
+- **Lead with the answer** — state your conclusion or recommendation in the first
+  1–2 sentences, then support it with evidence.
+- **Organize by theme, never by source** — do not walk through what each website
+  said. Group insights by topic (e.g., performance, price, reliability) and draw
+  on multiple sources per point.
 - **Keep specifics intact** — do not paraphrase away prices, model names, or
-  data points; present them as found.
+  data points; present them as found (cite the source inline).
 - **Offer to drill deeper** — after presenting, invite the user to ask follow-up
   questions or request a deeper look at a specific option.
 
@@ -87,6 +90,8 @@ If the user wants to explore a specific angle after the initial report:
 
 ## Pitfalls
 
+- **Don't dump findings source-by-source** — never walk through "Source 1 says…
+  Source 2 says…". Synthesize across sources, organized by theme.
 - **Don't skip clarification for major decisions** — "what car should I buy"
   without knowing budget, family size, or commute type leads to generic advice.
 - **Don't strip specifics** — the report contains concrete data; keep it when

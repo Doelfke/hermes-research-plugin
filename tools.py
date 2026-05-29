@@ -115,16 +115,21 @@ def _synthesize_report(llm, topic, findings_text):
     Single LLM call; capped input size for single-GPU efficiency.
     """
     prompt = (
-        f'You are a research assistant. Synthesize the following findings into a '
-        f'comprehensive report on: "{topic}"\n\n'
-        "━━━ RESEARCH FINDINGS ━━━\n"
+        f'You are a research assistant. Synthesize the following raw findings into a '
+        f'comprehensive, directly useful report on: "{topic}"\n\n'
+        "--- RESEARCH FINDINGS ---\n"
         f"{findings_text[:_MAX_SYNTHESIS_INPUT]}\n"
-        "━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        "-------------------------\n\n"
+        "CRITICAL RULES:\n"
+        "- NEVER organize output by source or website — organize ONLY by theme/topic\n"
+        "- Do NOT list what each individual source says; cross-reference and combine them\n"
+        "- Directly answer the user's question; do not just describe what sources exist\n\n"
         "Write a thorough, actionable report using these sections:\n\n"
         "## Summary\n"
-        "2–3 sentence answer to the core question. Lead with the conclusion.\n\n"
+        "2–3 sentence direct answer to the core question. Lead with the conclusion.\n\n"
         "## Key Findings\n"
-        "Organized by theme. Include specific data, names, prices, and facts from sources.\n\n"
+        "Organized by THEME (not by source). Combine and synthesize insights across sources. "
+        "Include specific data, names, prices, and facts — citing sources inline as (Source: title).\n\n"
         "## Recommendations\n"
         "Concrete and specific — name actual products/options/actions with reasoning.\n"
         "Do not say 'it depends' without immediately explaining what it depends on.\n\n"
@@ -132,17 +137,19 @@ def _synthesize_report(llm, topic, findings_text):
         "Important trade-offs, limitations, and things the user should watch out for.\n\n"
         "## Sources\n"
         "List each source title and URL used.\n\n"
-        "Be direct. Cite sources inline. Avoid filler and generic advice."
+        "Be direct. Avoid filler and generic advice."
     )
 
     try:
         return llm.complete(prompt)
     except Exception as e:
         logger.warning("Synthesis LLM call failed: %s", e)
-        # Return raw findings so the agent can still present something useful
+        # Return findings with explicit synthesis instructions for the calling agent
         return (
-            f"**Research gathered — LLM synthesis unavailable ({e})**\n\n"
-            f"Raw findings:\n\n{findings_text[:4000]}"
+            f"**NOTE: Automatic synthesis failed ({e}). "
+            "YOU MUST synthesize the findings below into a direct answer. "
+            "Do NOT present them source-by-source — organize by theme and lead with your conclusion.**\n\n"
+            f"---\n\n{findings_text[:4000]}"
         )
 
 
@@ -271,11 +278,16 @@ def make_deep_research_handler(ctx):
             if llm:
                 report = _synthesize_report(llm, topic, findings_text)
             else:
-                # No LLM access from plugin context — return raw findings
+                # No LLM access from plugin context — return findings with
+                # explicit instruction for the calling agent to synthesize
                 report = (
-                    f"# Research: {topic}\n\n"
-                    "*(Synthesis requires ctx.llm — not available in this context. "
-                    "Raw findings below.)*\n\n"
+                    f"# Research Findings: {topic}\n\n"
+                    "**IMPORTANT — YOU MUST SYNTHESIZE THIS**: Do NOT present these "
+                    "findings source-by-source. Read all findings below, then write a "
+                    "coherent answer organized by theme/topic that directly addresses "
+                    f'the question: \'{topic}\'. Lead with your conclusion, then support '
+                    "it with evidence drawn across multiple sources.\n\n"
+                    "---\n\n"
                     + findings_text
                 )
 
