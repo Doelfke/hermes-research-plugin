@@ -32,75 +32,66 @@ _EXTRACTS_PER_QUERY = {"quick": 1, "standard": 2, "thorough": 3}
 
 # ── Parsing helpers ───────────────────────────────────────────────────────────
 
-def _build_research_script(queries, extracts_per_query, max_content, max_snippet):
-    """Build the Python script executed via execute_code for search + extraction.
-
-    Uses ``from hermes_tools import web_search, web_extract`` as documented at
-    https://hermes-agent.nousresearch.com/docs/user-guide/features/code-execution
-    so that intermediate tool results never enter the context window.
+def _run_research_direct(dispatch_tool, queries, extracts_per_query, max_content, max_snippet):
+    """Run web search + extraction by dispatching web_search and web_extract tools
+    directly, without requiring Docker / execute_code.
     """
-    return f"""\
-from hermes_tools import web_search, web_extract
-import json
+    findings = []
+    sources = []
+    errors = []
 
-queries = {json.dumps(queries)}
-extracts_per_query = {extracts_per_query}
-max_content = {max_content}
-max_snippet = {max_snippet}
-
-findings = []
-sources = []
-errors = []
-
-for query in queries:
-    try:
-        search_result = web_search(query, limit=10)
-        web_results = search_result.get("data", {{}}).get("web", [])
-        if not web_results:
-            errors.append(f"No results for: {{query!r}}")
-            continue
-
-        extracted_this_query = 0
-        for r in web_results:
-            if extracted_this_query >= extracts_per_query:
-                break
-
-            url = (r.get("url") or "").strip()
-            title = (r.get("title") or r.get("name") or url).strip()
-            snippet = (r.get("snippet") or r.get("description") or "")[:max_snippet]
-
-            if not url or url in sources:
+    for query in queries:
+        try:
+            search_raw = dispatch_tool("web_search", {"query": query, "limit": 10})
+            if isinstance(search_raw, str):
+                search_raw = json.loads(search_raw)
+            web_results = search_raw.get("data", {}).get("web", [])
+            if not web_results:
+                errors.append(f"No results for: {query!r}")
                 continue
 
-            content = None
-            try:
-                page = web_extract([url])
-                for p in page.get("results", []):
-                    if p.get("content"):
-                        content = p["content"].strip()
-                        break
-            except Exception:
-                pass
+            extracted_this_query = 0
+            for r in web_results:
+                if extracted_this_query >= extracts_per_query:
+                    break
 
-            if not content:
-                if snippet:
-                    content = f"[Search snippet] {{snippet}}"
-                else:
+                url = (r.get("url") or "").strip()
+                title = (r.get("title") or r.get("name") or url).strip()
+                snippet = (r.get("snippet") or r.get("description") or "")[:max_snippet]
+
+                if not url or url in sources:
                     continue
 
-            findings.append({{
-                "query": query,
-                "url": url,
-                "title": title,
-                "content": content[:max_content],
-            }})
-            sources.append(url)
-            extracted_this_query += 1
-    except Exception as e:
-        errors.append(f"Search failed for {{query!r}}: {{str(e)[:300]}}")
+                content = None
+                try:
+                    page_raw = dispatch_tool("web_extract", {"urls": [url]})
+                    if isinstance(page_raw, str):
+                        page_raw = json.loads(page_raw)
+                    for p in page_raw.get("results", []):
+                        if p.get("content"):
+                            content = p["content"].strip()
+                            break
+                except Exception:
+                    pass
 
-print(json.dumps({{"findings": findings, "sources": sources, "errors": errors}}))
-"""
+                if not content:
+                    if snippet:
+                        content = f"[Search snippet] {snippet}"
+                    else:
+                        continue
+
+                findings.append({
+                    "query": query,
+                    "url": url,
+                    "title": title,
+                    "content": content[:max_content],
+                })
+                sources.append(url)
+                extracted_this_query += 1
+        except Exception as e:
+            errors.append(f"Search failed for {query!r}: {str(e)[:300]}")
+
+    return {"findings": findings, "sources": sources, "errors": errors}
 
 
 # ── LLM-assisted planning ─────────────────────────────────────────────────────
@@ -242,47 +233,18 @@ def make_deep_research_handler(ctx):
                 "deep_research: topic=%r depth=%s queries=%s", topic, depth, queries
             )
 
-            # ── Step 2: Search + extract via execute_code (single call) ────
-            # web_search and web_extract are called inside the script using
-            # `from hermes_tools import ...` so intermediate results never
-            # enter the context window.
-            script = _build_research_script(
-                queries, extracts_per_query,
+            # ── Step 2: Search + extract via direct tool dispatch ──────────
+            # Calls web_search and web_extract directly — no Docker required.
+            _eprint(f"Launching direct tool calls for {len(queries)} queries")
+            gathered = _run_research_direct(
+                ctx.dispatch_tool, queries, extracts_per_query,
                 _MAX_CONTENT_PER_SOURCE, _MAX_SNIPPET_FALLBACK,
             )
-            _eprint(f"Launching execute_code for {len(queries)} queries")
-            exec_raw = ctx.dispatch_tool("execute_code", {"code": script})
-            if isinstance(exec_raw, str):
-                exec_raw = json.loads(exec_raw)
-
-            exec_status = exec_raw.get("status", "error")
-            exec_output = (exec_raw.get("output") or "").strip()
-            _eprint(f"execute_code status={exec_status!r} output_len={len(exec_output)}")
-
-            if exec_status != "success" or not exec_output:
-                return json.dumps({
-                    "success": False,
-                    "error": (
-                        f"Research data collection failed "
-                        f"(execute_code status={exec_status!r}): "
-                        f"{exec_output[:500] or exec_raw.get('error', 'no output')}"
-                    ),
-                    "queries_attempted": queries,
-                })
-
-            try:
-                gathered = json.loads(exec_output)
-            except json.JSONDecodeError as e:
-                return json.dumps({
-                    "success": False,
-                    "error": f"Failed to parse research script output: {e}",
-                    "raw_output": exec_output[:500],
-                })
 
             findings = gathered.get("findings", [])
             sources = gathered.get("sources", [])
             errors = gathered.get("errors", [])
-            _eprint(f"execute_code: {len(findings)} findings, {len(errors)} errors")
+            _eprint(f"direct search: {len(findings)} findings, {len(errors)} errors")
 
             # ── Early exit if nothing was gathered ────────────────────────────
             if not findings:
