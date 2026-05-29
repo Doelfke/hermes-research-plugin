@@ -9,7 +9,6 @@ metadata:
   hermes:
     tags: [research, web, analysis, synthesis, shopping, comparison]
     category: research
-    requires_tools: [web_search, web_extract]
 ---
 
 # Deep Research
