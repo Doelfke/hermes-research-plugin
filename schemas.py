@@ -26,12 +26,22 @@ DEEP_RESEARCH = {
             },
             "depth": {
                 "type": "string",
-                "enum": ["thorough"],
+                "enum": ["quick", "standard", "thorough"],
                 "description": (
-                    "Research depth — always 'thorough': 6 queries / 7-9 sources."
+                    "Research depth level. "
+                    "'quick': 2 queries / 2-4 sources. "
+                    "'standard': 4 queries / 4-6 sources (default for most tasks). "
+                    "'thorough': 6 queries / 7-9 sources (best for complex decisions)."
                 ),
             },
-
+            "focus": {
+                "type": "string",
+                "description": (
+                    "Optional specific angle or constraint to emphasize in the research. "
+                    "Examples: 'budget under $200', 'reliability and total cost of ownership', "
+                    "'developer experience and ecosystem maturity'"
+                ),
+            },
         },
         "required": ["topic"],
     },

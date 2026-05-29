@@ -27,22 +27,57 @@ _EXTRACTS_PER_QUERY = {"quick": 1, "standard": 2, "thorough": 3}
 # ── Parsing helpers ───────────────────────────────────────────────────────────
 
 def _parse_search_results(raw):
-    """Return list of result dicts from a web_search JSON response."""
+    """Return list of result dicts from a web_search JSON response.
+
+    Handles multiple common response shapes:
+      - {"success": true, "results": [...]}
+      - {"results": [...]}  (no success field)
+      - {"ok": true, "items": [...]}
+      - [...]  (bare list)
+    """
     try:
         data = json.loads(raw) if isinstance(raw, str) else raw
-        if not data.get("success"):
+        if data is None:
             return []
-        return data.get("results", [])
+        # Bare list
+        if isinstance(data, list):
+            return data
+        # Explicit failure with no results
+        if data.get("success") is False and not (
+            data.get("results") or data.get("items") or data.get("data")
+        ):
+            return []
+        # Try common result-list keys
+        for key in ("results", "items", "data", "hits", "organic"):
+            items = data.get(key)
+            if isinstance(items, list) and items:
+                return items
+        return []
     except Exception:
         return []
 
 
 def _parse_extract_content(raw):
-    """Return content string from a web_extract JSON response, or None."""
+    """Return content string from a web_extract JSON response, or None.
+
+    Handles:
+      - {"success": true, "content": "..."}
+      - {"text": "...", "markdown": "..."}  (no success wrapper)
+    """
     try:
         data = json.loads(raw) if isinstance(raw, str) else raw
-        if data.get("success") and data.get("content"):
-            return data["content"].strip()
+        if data is None:
+            return None
+        # Explicit failure
+        if data.get("success") is False:
+            return None
+        # Try common content keys
+        for key in ("content", "text", "markdown", "body"):
+            val = data.get(key)
+            if val and isinstance(val, str):
+                stripped = val.strip()
+                if stripped:
+                    return stripped
     except Exception:
         pass
     return None
@@ -64,7 +99,7 @@ def _fallback_queries(topic, depth):
     return candidates[:n]
 
 
-def _plan_queries(llm, topic, depth):
+def _plan_queries(llm, topic, depth, focus=""):
     """
     Use the model to generate targeted search queries for the research topic.
     Single LLM call; falls back to _fallback_queries on any failure.
@@ -72,8 +107,9 @@ def _plan_queries(llm, topic, depth):
     """
     n = _QUERY_COUNT.get(depth, 4)
 
+    focus_line = f'\nFocus constraint: "{focus}"' if focus else ""
     prompt = (
-        f'Generate {n} specific search queries to thoroughly research: "{topic}"\n\n'
+        f'Generate {n} specific search queries to thoroughly research: "{topic}"{focus_line}\n\n'
         "Rules:\n"
         "- Return ONLY a JSON array of query strings, nothing else\n"
         "- Queries must be specific and targeted, not generic\n"
@@ -153,7 +189,10 @@ def make_deep_research_handler(ctx):
         if not topic:
             return json.dumps({"success": False, "error": "topic is required"})
 
-        depth = "thorough"
+        depth = (args.get("depth") or "thorough").lower()
+        if depth not in _QUERY_COUNT:
+            depth = "thorough"
+        focus = (args.get("focus") or "").strip()
 
         extracts_per_query = _EXTRACTS_PER_QUERY.get(depth, 2)
 
@@ -164,7 +203,7 @@ def make_deep_research_handler(ctx):
         try:
             # ── Step 1: Plan search queries (1 LLM call) ─────────────────────
             if llm:
-                queries = _plan_queries(llm, topic, depth)
+                queries = _plan_queries(llm, topic, depth, focus)
             else:
                 queries = _fallback_queries(topic, depth)
 
@@ -187,10 +226,19 @@ def make_deep_research_handler(ctx):
                         if extracted_this_query >= extracts_per_query:
                             break
 
-                        url = (r.get("url") or "").strip()
-                        title = (r.get("title") or r.get("name") or url).strip()
+                        # Support common URL field names across search providers
+                        url = (
+                            r.get("url") or r.get("link") or r.get("href") or ""
+                        ).strip()
+                        title = (
+                            r.get("title") or r.get("name") or url
+                        ).strip()
                         snippet = (
-                            r.get("snippet") or r.get("description") or ""
+                            r.get("snippet")
+                            or r.get("description")
+                            or r.get("summary")
+                            or r.get("body")
+                            or ""
                         )[:_MAX_SNIPPET_FALLBACK]
 
                         if not url or url in sources:
