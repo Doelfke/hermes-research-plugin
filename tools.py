@@ -27,22 +27,34 @@ _EXTRACTS_PER_QUERY = {"quick": 1, "standard": 2, "thorough": 3}
 # ── Parsing helpers ───────────────────────────────────────────────────────────
 
 def _parse_search_results(raw):
-    """Return list of result dicts from a web_search JSON response."""
+    """Return list of result dicts from a web_search JSON response.
+
+    Hermes web_search response shape:
+        {"success": true, "data": {"web": [{"title", "url", "description", "position"}, ...]}}
+    """
     try:
         data = json.loads(raw) if isinstance(raw, str) else raw
         if not data.get("success"):
             return []
-        return data.get("results", [])
+        return data.get("data", {}).get("web", [])
     except Exception:
         return []
 
 
 def _parse_extract_content(raw):
-    """Return content string from a web_extract JSON response, or None."""
+    """Return content string from a web_extract JSON response, or None.
+
+    Hermes web_extract response shape:
+        {"success": true, "data": [{"url", "title", "content", "raw_content", ...}]}
+    """
     try:
         data = json.loads(raw) if isinstance(raw, str) else raw
-        if data.get("success") and data.get("content"):
-            return data["content"].strip()
+        if not data.get("success"):
+            return None
+        results = data.get("data") or []
+        if isinstance(results, list) and results:
+            item = results[0]
+            return (item.get("content") or item.get("raw_content") or "").strip() or None
     except Exception:
         pass
     return None
@@ -200,7 +212,7 @@ def make_deep_research_handler(ctx):
                         content = None
                         try:
                             extract_raw = ctx.dispatch_tool(
-                                "web_extract", {"url": url}
+                                "web_extract", {"urls": [url]}
                             )
                             content = _parse_extract_content(extract_raw)
                         except Exception as ex:
