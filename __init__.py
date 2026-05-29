@@ -87,7 +87,7 @@ def register(ctx):
             tool_args["focus"] = focus
 
         try:
-            result_json = ctx.dispatch_tool("deep_research", tool_args)
+            result_json = handler(tool_args)
             result = json.loads(result_json)
 
             if result.get("success"):
@@ -116,7 +116,13 @@ def register(ctx):
                 )
             else:
                 err = result.get("error", "Unknown error")
-                return f"❌ Research failed: {err}"
+                detail_errors = result.get("errors") or []
+                detail = (
+                    "\n\n*Details:*\n" + "\n".join(f"  • {e}" for e in detail_errors[:5])
+                    if detail_errors
+                    else ""
+                )
+                return f"❌ Research failed: {err}{detail}"
 
         except Exception as e:
             logger.exception("/research command failed")
