@@ -4,7 +4,7 @@ description: >
   Deep research assistant — iterative multi-angle web research with structured synthesis.
   Works like Claude's extended research mode: plans targeted queries, searches the web,
   extracts content from sources, and synthesizes a comprehensive report on any topic.
-  Exposes a /research slash command and a deep_research tool.
+  Exposes a /deep-research slash command and a deep_research tool.
 author: hermes-research-plugin
 provides_tools:
   - deep_research

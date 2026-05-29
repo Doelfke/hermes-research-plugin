@@ -51,7 +51,7 @@ hermes plugins enable deep-research
 
 | What | How to use |
 |------|-----------|
-| `/research` slash command | Primary entry point — type `/research <topic>` |
+| `/deep-research` slash command | Primary entry point — type `/deep-research <topic>` |
 | `deep_research` tool | The LLM calls this automatically for research tasks |
 | Bundled `deep-research` skill | Load with `skill_view("deep-research:deep-research")` |
 
@@ -62,12 +62,12 @@ hermes plugins enable deep-research
 ### Slash command
 
 ```
-/research what's the best toaster for home use under $100
-/research what electric car should I buy for city commuting --depth thorough
-/research noise-cancelling headphones --focus budget under $200 --depth thorough
-/research should I move to Austin TX --focus family with young kids
-/research latest advances in battery technology 2025 --depth quick
-/research React vs Vue for a medium SaaS app
+/deep-research what's the best toaster for home use under $100
+/deep-research what electric car should I buy for city commuting --depth thorough
+/deep-research noise-cancelling headphones --focus budget under $200 --depth thorough
+/deep-research should I move to Austin TX --focus family with young kids
+/deep-research latest advances in battery technology 2025 --depth quick
+/deep-research React vs Vue for a medium SaaS app
 ```
 
 **Flags:**
@@ -132,7 +132,7 @@ Run `hermes setup` — `web_search` may not be configured.
 The plugin could not call `ctx.llm.complete()`. Check that your Hermes version
 supports plugin LLM access (v0.8+).
 
-**`/research` command not found after install**
+**`/deep-research` command not found after install**
 Run `hermes plugins enable deep-research` and restart Hermes.
 
 ---

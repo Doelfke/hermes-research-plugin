@@ -3,8 +3,8 @@ Deep Research Plugin — registration.
 
 Registers:
   - deep_research tool       (LLM calls this for research tasks)
-  - /research slash command  (user-facing entry point; wraps the tool)
-  - Bundled skill deep-research (loadable via skill_view("deep-research:deep-research"))
+  - /deep-research slash command  (user-facing entry point; wraps the tool)
+  - Bundled skill deep-research (loadable via skill_view("deep-research"))
 """
 
 import json
@@ -40,8 +40,8 @@ def register(ctx):
         ),
     )
 
-    # ── Slash command: /research ──────────────────────────────────────────────
-    # Registered as "research" → invoked as /research <topic>
+    # ── Slash command: /deep-research ──────────────────────────────────────────────
+    # Registered as "deep-research" → invoked as /deep-research <topic>
     # Supports: --depth quick|standard|thorough   --focus <text>
     def _handle_research_command(raw_args: str):
         topic = raw_args.strip()
@@ -49,14 +49,14 @@ def register(ctx):
         if not topic or topic.lower() in ("help", "--help", "-h"):
             return (
                 "**Deep Research Plugin**\n\n"
-                "**Usage:** `/research <topic> [--depth quick|standard|thorough] [--focus <constraint>]`\n\n"
+                "**Usage:** `/deep-research <topic> [--depth quick|standard|thorough] [--focus <constraint>]`\n\n"
                 "**Examples:**\n"
                 "```\n"
-                "/research what's the best toaster for home use under $100\n"
-                "/research what electric car should I buy for city commuting --depth thorough\n"
-                "/research noise-cancelling headphones --focus budget under $200\n"
-                "/research latest AI research papers 2025 --depth quick\n"
-                "/research should I move to Austin TX --focus family with young kids\n"
+                "/deep-research what's the best toaster for home use under $100\n"
+                "/deep-research what electric car should I buy for city commuting --depth thorough\n"
+                "/deep-research noise-cancelling headphones --focus budget under $200\n"
+                "/deep-research latest AI research papers 2025 --depth quick\n"
+                "/deep-research should I move to Austin TX --focus family with young kids\n"
                 "```\n\n"
                 "**Depth levels:**\n"
                 "- `thorough` — 6 queries, 7–9 sources (most comprehensive)\n\n"
@@ -82,7 +82,7 @@ def register(ctx):
             topic = (topic[: focus_match.start()] + " " + topic[focus_match.end() :]).strip()
 
         if not topic:
-            return "Please provide a research topic. Usage: `/research <topic>`"
+            return "Please provide a research topic. Usage: `/deep-research <topic>`"
 
         tool_args = {"topic": topic, "depth": depth}
         if focus:
@@ -127,15 +127,15 @@ def register(ctx):
                 return f"❌ Research failed: {err}{detail}"
 
         except Exception as e:
-            logger.exception("/research command failed")
+            logger.exception("/deep-research command failed")
             return f"❌ Research command error: {e}"
 
     ctx.register_command(
-        "research",
+        "deep-research",
         handler=_handle_research_command,
         description=(
             "Deep web research on any topic — searches, extracts, and synthesizes "
-            "a comprehensive report. Use: /research <topic> [--depth quick|standard|thorough]"
+            "a comprehensive report. Use: /deep-research <topic> [--depth quick|standard|thorough]"
         ),
     )
 
@@ -148,5 +148,5 @@ def register(ctx):
                 logger.debug("deep-research plugin: registered skill %r", child.name)
 
     logger.info(
-        "deep-research plugin loaded — tool: deep_research, command: /research"
+        "deep-research plugin loaded — tool: deep_research, command: /deep-research"
     )
