@@ -10,9 +10,15 @@ Designed for single-GPU / single-model setups:
 
 import json
 import re
+import sys
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+def _eprint(*args):
+    """Always-visible stderr print — appears in server logs regardless of log level."""
+    print("[deep-research]", *args, file=sys.stderr, flush=True)
 
 # ── Content limits (tuned for single-GPU / single-model setups) ──────────────
 _MAX_CONTENT_PER_SOURCE = 1800   # chars kept from each web_extract result
@@ -195,10 +201,12 @@ def make_deep_research_handler(ctx):
             for query in queries:
                 try:
                     search_raw = ctx.dispatch_tool("web_search", {"query": query})
+                    _eprint(f"web_search raw response ({query!r}): {str(search_raw)[:300]}")
                     results = _parse_search_results(search_raw)
 
                     if not results:
                         errors.append(f"No results for query: {query!r}")
+                        _eprint(f"No results parsed for query: {query!r}")
                         continue
 
                     extracted_this_query = 0
@@ -246,9 +254,10 @@ def make_deep_research_handler(ctx):
                         extracted_this_query += 1
 
                 except Exception as e:
-                    msg = f"Search failed for {query!r}: {str(e)[:150]}"
+                    msg = f"Search failed for {query!r}: {str(e)[:300]}"
                     errors.append(msg)
                     logger.warning("deep_research: %s", msg)
+                    _eprint(msg)
 
             # ── Early exit if nothing was gathered ────────────────────────────
             if not findings:

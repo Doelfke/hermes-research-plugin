@@ -9,6 +9,7 @@ Registers:
 
 import json
 import re
+import sys
 import logging
 from pathlib import Path
 
@@ -22,6 +23,7 @@ _SKILLS_DIR = Path(__file__).parent / "skills"
 
 def register(ctx):
     """Wire schemas to handlers and register the slash command and bundled skill."""
+    print("[deep-research] plugin register() called — v1.0.0-diag", file=sys.stderr, flush=True)
 
     # ── Tool: deep_research ───────────────────────────────────────────────────
     handler = make_deep_research_handler(ctx)
