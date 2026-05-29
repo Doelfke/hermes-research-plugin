@@ -32,38 +32,75 @@ _EXTRACTS_PER_QUERY = {"quick": 1, "standard": 2, "thorough": 3}
 
 # ── Parsing helpers ───────────────────────────────────────────────────────────
 
-def _parse_search_results(raw):
-    """Return list of result dicts from a web_search JSON response.
+def _build_research_script(queries, extracts_per_query, max_content, max_snippet):
+    """Build the Python script executed via execute_code for search + extraction.
 
-    Hermes web_search response shape:
-        {"success": true, "data": {"web": [{"title", "url", "description", "position"}, ...]}}
+    Uses ``from hermes_tools import web_search, web_extract`` as documented at
+    https://hermes-agent.nousresearch.com/docs/user-guide/features/code-execution
+    so that intermediate tool results never enter the context window.
     """
+    return f"""\
+from hermes_tools import web_search, web_extract
+import json
+
+queries = {json.dumps(queries)}
+extracts_per_query = {extracts_per_query}
+max_content = {max_content}
+max_snippet = {max_snippet}
+
+findings = []
+sources = []
+errors = []
+
+for query in queries:
     try:
-        data = json.loads(raw) if isinstance(raw, str) else raw
-        if not data.get("success"):
-            return []
-        return data.get("data", {}).get("web", [])
-    except Exception:
-        return []
+        search_result = web_search(query, limit=10)
+        web_results = search_result.get("data", {{}}).get("web", [])
+        if not web_results:
+            errors.append(f"No results for: {{query!r}}")
+            continue
 
+        extracted_this_query = 0
+        for r in web_results:
+            if extracted_this_query >= extracts_per_query:
+                break
 
-def _parse_extract_content(raw):
-    """Return content string from a web_extract JSON response, or None.
+            url = (r.get("url") or "").strip()
+            title = (r.get("title") or r.get("name") or url).strip()
+            snippet = (r.get("snippet") or r.get("description") or "")[:max_snippet]
 
-    Hermes web_extract response shape:
-        {"success": true, "data": [{"url", "title", "content", "raw_content", ...}]}
-    """
-    try:
-        data = json.loads(raw) if isinstance(raw, str) else raw
-        if not data.get("success"):
-            return None
-        results = data.get("data") or []
-        if isinstance(results, list) and results:
-            item = results[0]
-            return (item.get("content") or item.get("raw_content") or "").strip() or None
-    except Exception:
-        pass
-    return None
+            if not url or url in sources:
+                continue
+
+            content = None
+            try:
+                page = web_extract([url])
+                for p in page.get("results", []):
+                    if p.get("content"):
+                        content = p["content"].strip()
+                        break
+            except Exception:
+                pass
+
+            if not content:
+                if snippet:
+                    content = f"[Search snippet] {{snippet}}"
+                else:
+                    continue
+
+            findings.append({{
+                "query": query,
+                "url": url,
+                "title": title,
+                "content": content[:max_content],
+            }})
+            sources.append(url)
+            extracted_this_query += 1
+    except Exception as e:
+        errors.append(f"Search failed for {{query!r}}: {{str(e)[:300]}}")
+
+print(json.dumps({{"findings": findings, "sources": sources, "errors": errors}}))
+"""
 
 
 # ── LLM-assisted planning ─────────────────────────────────────────────────────
@@ -115,11 +152,18 @@ def _plan_queries(llm, topic, depth):
 
 # ── Synthesis ─────────────────────────────────────────────────────────────────
 
+def _sanitize_text(text):
+    """Remove null bytes and non-printable control characters that can corrupt JSON request bodies."""
+    # Strip null bytes and ASCII control chars (except tab, newline, carriage return)
+    return re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", "", text)
+
+
 def _synthesize_report(llm, topic, findings_text):
     """
     Use the model to synthesize gathered findings into a structured research report.
     Single LLM call; capped input size for single-GPU efficiency.
     """
+    findings_text = _sanitize_text(findings_text)
     prompt = (
         f'You are a research assistant. Synthesize the following raw findings into a '
         f'comprehensive, directly useful report on: "{topic}"\n\n'
@@ -167,9 +211,10 @@ def make_deep_research_handler(ctx):
 
     The handler uses:
       ctx.llm.complete()     — query planning (1 call) + synthesis (1 call)
-      ctx.dispatch_tool()    — web_search and web_extract calls
+      ctx.dispatch_tool()    — execute_code (1 call; runs web_search + web_extract
+                               via `from hermes_tools import ...` inside the script)
 
-    Both are sequential — safe for single-GPU / single-model setups.
+    All steps are sequential — safe for single-GPU / single-model setups.
     """
     llm = getattr(ctx, "llm", None)
 
@@ -197,67 +242,47 @@ def make_deep_research_handler(ctx):
                 "deep_research: topic=%r depth=%s queries=%s", topic, depth, queries
             )
 
-            # ── Step 2: Search + extract (sequential, no parallel LLM calls) ─
-            for query in queries:
-                try:
-                    search_raw = ctx.dispatch_tool("web_search", {"query": query})
-                    _eprint(f"web_search raw response ({query!r}): {str(search_raw)[:300]}")
-                    results = _parse_search_results(search_raw)
+            # ── Step 2: Search + extract via execute_code (single call) ────
+            # web_search and web_extract are called inside the script using
+            # `from hermes_tools import ...` so intermediate results never
+            # enter the context window.
+            script = _build_research_script(
+                queries, extracts_per_query,
+                _MAX_CONTENT_PER_SOURCE, _MAX_SNIPPET_FALLBACK,
+            )
+            _eprint(f"Launching execute_code for {len(queries)} queries")
+            exec_raw = ctx.dispatch_tool("execute_code", {"code": script})
+            if isinstance(exec_raw, str):
+                exec_raw = json.loads(exec_raw)
 
-                    if not results:
-                        errors.append(f"No results for query: {query!r}")
-                        _eprint(f"No results parsed for query: {query!r}")
-                        continue
+            exec_status = exec_raw.get("status", "error")
+            exec_output = (exec_raw.get("output") or "").strip()
+            _eprint(f"execute_code status={exec_status!r} output_len={len(exec_output)}")
 
-                    extracted_this_query = 0
-                    for r in results:
-                        if extracted_this_query >= extracts_per_query:
-                            break
+            if exec_status != "success" or not exec_output:
+                return json.dumps({
+                    "success": False,
+                    "error": (
+                        f"Research data collection failed "
+                        f"(execute_code status={exec_status!r}): "
+                        f"{exec_output[:500] or exec_raw.get('error', 'no output')}"
+                    ),
+                    "queries_attempted": queries,
+                })
 
-                        url = (r.get("url") or "").strip()
-                        title = (r.get("title") or r.get("name") or url).strip()
-                        snippet = (
-                            r.get("snippet") or r.get("description") or ""
-                        )[:_MAX_SNIPPET_FALLBACK]
+            try:
+                gathered = json.loads(exec_output)
+            except json.JSONDecodeError as e:
+                return json.dumps({
+                    "success": False,
+                    "error": f"Failed to parse research script output: {e}",
+                    "raw_output": exec_output[:500],
+                })
 
-                        if not url or url in sources:
-                            continue
-
-                        # Try full extraction first
-                        content = None
-                        try:
-                            extract_raw = ctx.dispatch_tool(
-                                "web_extract", {"urls": [url]}
-                            )
-                            content = _parse_extract_content(extract_raw)
-                        except Exception as ex:
-                            logger.debug(
-                                "web_extract failed for %s: %s", url, ex
-                            )
-
-                        # Fall back to snippet when extraction is unavailable
-                        if not content:
-                            if snippet:
-                                content = f"[Search snippet] {snippet}"
-                            else:
-                                continue  # skip — no usable content
-
-                        findings.append(
-                            {
-                                "query": query,
-                                "url": url,
-                                "title": title,
-                                "content": content[:_MAX_CONTENT_PER_SOURCE],
-                            }
-                        )
-                        sources.append(url)
-                        extracted_this_query += 1
-
-                except Exception as e:
-                    msg = f"Search failed for {query!r}: {str(e)[:300]}"
-                    errors.append(msg)
-                    logger.warning("deep_research: %s", msg)
-                    _eprint(msg)
+            findings = gathered.get("findings", [])
+            sources = gathered.get("sources", [])
+            errors = gathered.get("errors", [])
+            _eprint(f"execute_code: {len(findings)} findings, {len(errors)} errors")
 
             # ── Early exit if nothing was gathered ────────────────────────────
             if not findings:
