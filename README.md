@@ -28,19 +28,19 @@ extracts content from sources, and synthesizes a comprehensive report on any top
 ### One-liner (recommended)
 
 ```bash
-hermes plugins install YOUR_GITHUB_USERNAME/hermes-research-plugin --enable
+hermes plugins install Doelfke/hermes-research-plugin --enable
 ```
 
 ### With the convenience script
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/YOUR_GITHUB_USERNAME/hermes-research-plugin/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Doelfke/hermes-research-plugin/main/install.sh | bash
 ```
 
 ### Manual
 
 ```bash
-git clone https://github.com/YOUR_GITHUB_USERNAME/hermes-research-plugin \
+git clone https://github.com/Doelfke/hermes-research-plugin \
     ~/.hermes/plugins/deep-research
 hermes plugins enable deep-research
 ```
