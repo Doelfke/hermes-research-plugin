@@ -129,7 +129,7 @@ def _plan_queries(llm, topic, depth):
     )
 
     try:
-        response = llm.complete(prompt)
+        response = llm.complete([{"role": "user", "content": prompt}])
         match = re.search(r"\[.*?\]", response, re.DOTALL)
         if match:
             queries = json.loads(match.group())
@@ -182,7 +182,7 @@ def _synthesize_report(llm, topic, findings_text):
     )
 
     try:
-        return llm.complete(prompt)
+        return llm.complete([{"role": "user", "content": prompt}])
     except Exception as e:
         logger.warning("Synthesis LLM call failed: %s", e)
         # Return findings with explicit synthesis instructions for the calling agent
